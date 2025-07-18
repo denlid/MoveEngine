@@ -1,0 +1,12 @@
+name: MyPlugin
+version: 1.0
+main: com.example.Main
+api-version: 1.20
+depend: [ ProtocolLib ]
+commands:
+  spawnship:
+    description: spawn ship
+  shipcontrol:
+    description: Выдаёт стрелы управления кораблём
+  shiphitbox:
+    description: Выдаёт стрелы управления кораблём
