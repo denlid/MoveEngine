@@ -1,5 +1,6 @@
 package com.example;
 
+import com.example.commands.ArmorStandCommand;
 import org.bukkit.plugin.java.JavaPlugin;
 
 import com.example.commands.ShipControl;
@@ -19,6 +20,10 @@ public class Main extends JavaPlugin {
         getCommand("spawnship").setExecutor(new SpawnShip());
         getCommand("shipcontrol").setExecutor(new ShipControl());
         getCommand("shiphitbox").setExecutor(new ShipHitboxCommand());
+
+        ArmorStandCommand commandExecutor = new ArmorStandCommand();
+        getCommand("velocity").setExecutor(commandExecutor);
+        getCommand("spawnarmor").setExecutor(commandExecutor);
 
         getServer().getPluginManager().registerEvents(new ShipControlListener(), this);
         getServer().getPluginManager().registerEvents(new ShipWheelListener(), this);

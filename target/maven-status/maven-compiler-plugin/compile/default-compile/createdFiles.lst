@@ -1,2 +1,3 @@
 com/example/manager/ShipManager.class
+com/example/commands/ArmorStandCommand.class
 com/example/listeners/ShipLeaveWheelListener.class

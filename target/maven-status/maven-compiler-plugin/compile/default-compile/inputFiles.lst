@@ -4,7 +4,8 @@
 /home/admin/Projects/minecraft/plugins/test_project/src/main/java/com/example/listeners/ShipControlListener.java
 /home/admin/Projects/minecraft/plugins/test_project/src/main/java/com/example/listeners/ShipWheelListener.java
 /home/admin/Projects/minecraft/plugins/test_project/src/main/java/com/example/commands/ShipControl.java
-/home/admin/Projects/minecraft/plugins/test_project/src/main/java/com/example/listeners/ShipLeaveWheelListener.java
 /home/admin/Projects/minecraft/plugins/test_project/src/main/java/com/example/Main.java
+/home/admin/Projects/minecraft/plugins/test_project/src/main/java/com/example/listeners/ShipLeaveWheelListener.java
+/home/admin/Projects/minecraft/plugins/test_project/src/main/java/com/example/commands/ArmorStandCommand.java
 /home/admin/Projects/minecraft/plugins/test_project/src/main/java/com/example/manager/ShipManager.java
 /home/admin/Projects/minecraft/plugins/test_project/src/main/java/com/example/utils/GeometryUtils.java

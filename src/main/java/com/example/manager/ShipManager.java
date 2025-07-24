@@ -23,15 +23,16 @@ public class ShipManager {
     public void registerShip(Ship ship, ArmorStand wheelStand, List<ArmorStand> cannonStands) {
 
         // лучше придумать не мог
-        Map<String, Object> innerMap = new HashMap<>();
-        innerMap.put("type", "wheel");
-        innerMap.put("ship", ship);
-        stands.put(wheelStand.getUniqueId(), innerMap);
+        Map<String, Object> wheelMap = new HashMap<>();
+        wheelMap.put("type", "wheel");
+        wheelMap.put("ship", ship);
+        stands.put(wheelStand.getUniqueId(), wheelMap);
 
         for (ArmorStand cannonStand : cannonStands) {
-            innerMap.put("type", "cannon");
-            innerMap.put("ship", ship);
-            stands.put(cannonStand.getUniqueId(), innerMap);
+            Map<String, Object> cannonMap = new HashMap<>();
+            cannonMap.put("type", "cannon");
+            cannonMap.put("ship", ship);
+            stands.put(cannonStand.getUniqueId(), cannonMap);
         }
     }
 

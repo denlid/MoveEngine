@@ -10,3 +10,7 @@ commands:
     description: Выдаёт стрелы управления кораблём
   shiphitbox:
     description: Выдаёт стрелы управления кораблём
+  velocity:
+    description: Устанавливает вектор скорости ArmorStand
+  spawnarmor:
+    description: Спавнит ArmorStand

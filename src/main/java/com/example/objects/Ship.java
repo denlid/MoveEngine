@@ -13,6 +13,7 @@ import org.bukkit.Particle;
 import org.bukkit.World;
 import org.bukkit.entity.ArmorStand;
 import org.bukkit.entity.Entity;
+import org.bukkit.entity.ItemDisplay;
 import org.bukkit.entity.Player;
 import org.bukkit.inventory.ItemStack;
 import org.bukkit.scheduler.BukkitRunnable;
@@ -26,6 +27,7 @@ import com.ticxo.modelengine.api.ModelEngineAPI;
 import com.ticxo.modelengine.api.model.ActiveModel;
 import com.ticxo.modelengine.api.model.ModeledEntity;
 import com.ticxo.modelengine.api.model.bone.SimpleManualAnimator;
+
 
 public class Ship {
     private final World world;
@@ -50,11 +52,20 @@ public class Ship {
 
     private final List<Vector> cannonsOffsets = List.of(new Vector(0, 10.0, 0));
 
+    private BukkitTask tickTask;
+    private int tickCounter = 0;
+
+    private Location lastCenterSnapshot;
+    private float lastYawSnapshot;
+
 
     public Ship(Location center, float yaw) {
         this.center = center.getBlock().getLocation();
         this.yaw = yaw;
         this.world = center.getWorld();
+
+        this.lastCenterSnapshot = this.center.clone();
+        this.lastYawSnapshot = yaw;
     }
 
     public void spawn() {
@@ -63,6 +74,46 @@ public class Ship {
         placeBlocks();
 
         ShipManager.getInstance().registerShip(this, wheelStand, List.of());
+
+        startTickUpdater();
+    }
+
+
+    private void startTickUpdater() {
+        if (tickTask != null) return; // уже запущен
+        tickTask = new BukkitRunnable() {
+            @Override
+            public void run() {
+                onTick();
+            }
+        }.runTaskTimer(getPlugin(), 0L, 1L); // каждый тик
+    }
+
+    private void onTick() {
+
+        syncAfterTransform();
+
+    }
+
+    private void syncAfterTransform() {
+        // проверим, сместилось ли что-то относительно снапшота
+        boolean moved = !center.equals(lastCenterSnapshot);
+        boolean rotated = Math.abs(yaw - lastYawSnapshot) > 0.0001f;
+        if (!moved && !rotated) return; // нечего делать
+
+        // 1) обновляем коллизионные барьеры
+        placeBlocks();
+
+        // 2) модель и штурвал
+        updateDisplay();
+        updateWheelTransform(); // (updateDisplay уже её зовёт, но оставим на всякий случай)
+
+        // 3) пассажиры
+        syncPassengers(lastCenterSnapshot, lastYawSnapshot, center, yaw);
+
+        // сохраняем снапшот
+        lastCenterSnapshot = center.clone();
+        lastYawSnapshot = yaw;
     }
 
 
@@ -74,13 +125,13 @@ public class Ship {
         }
 
         List<int[]> newCords = getTouchedCells(
-            center.getX(),
-            center.getY() + 0.5,
-            center.getZ(),
-            width,
-            height,
-            length,
-            yaw
+                center.getX(),
+                center.getY() + 0.5,
+                center.getZ(),
+                width,
+                height,
+                length,
+                yaw
         );
 
         List<Location> newBlocks = new ArrayList<>();
@@ -99,10 +150,10 @@ public class Ship {
 
     private void spawnShipDisplay() {
         // Спавним невидимый ArmorStand без физики
-        shipStand = center.getWorld().spawn(center, ArmorStand.class);
+        shipStand = center.getWorld().spawn(center.clone().add(0, 10, 0), ArmorStand.class);
         shipStand.setInvisible(true);
-        shipStand.setGravity(false);
-        shipStand.setMarker(true);
+        shipStand.setGravity(true);
+        shipStand.setMarker(false);
         shipStand.setSilent(true);
         shipStand.setCollidable(false);
         shipStand.setBasePlate(false);
@@ -128,7 +179,25 @@ public class Ship {
         if (shipStand == null) return;
 
         shipStand.teleport(center.clone());
-        updateWheelTransform();
+        //shipStand.setVelocity(center.clone().toVector().subtract(lastCenterSnapshot.toVector()));
+
+
+        /*Location currentLoc = shipStand.getLocation();
+        Vector currentPos = currentLoc.toVector();
+        Vector targetPos = center.clone().toVector(); // центр, куда должна прийти модель
+
+        Vector velocity = targetPos.subtract(currentPos); // смещение от текущей позиции к целевой
+
+        System.out.println(center.clone());
+        System.out.println(center.clone().toVector());
+        System.out.println(lastCenterSnapshot);
+        System.out.println(lastCenterSnapshot.toVector());
+        System.out.println(center.clone().toVector().subtract(currentPos));
+        System.out.println(center.clone().toVector().subtract(currentPos).multiply(20));
+        System.out.println(velocity);
+        System.out.println("=========================");
+
+        shipStand.setVelocity(velocity);*/
 
         activeModel.getBone("bone").ifPresent(modelBone -> {
             float yawRad = (float) Math.toRadians(yaw+90);
@@ -189,111 +258,25 @@ public class Ship {
     public void moveForward() {
         double radians = Math.toRadians(-yaw);
         Vector offset = new Vector(Math.cos(radians), 0, Math.sin(radians));
-        moveSmoothly(offset, 10); // 10 шагов
+        center.add(offset.multiply(0.4));
     }
 
 
     public void moveBackward() {
         double radians = Math.toRadians(-yaw);
-        Vector offset = new Vector(-Math.cos(radians), 0, -Math.sin(radians));
-        moveSmoothly(offset, 10); // 10 шагов назад
-
-        updateDisplay();
+        Vector offset = new Vector(Math.cos(radians), 0, Math.sin(radians));
+        center.subtract(offset.multiply(0.4));
     }
 
     public void rotateRight() {
-        rotateSmoothly(15f, 30); // 15 градусов за 10 шагов
+        yaw += 1;
     }
 
     public void rotateLeft() {
-        rotateSmoothly(-15f, 30); // 15 градусов за 10 шагов
+        yaw -= 1;
     }
 
 
-    public void moveSmoothly(Vector offset, int steps) {
-        Vector stepOffset = offset.clone().multiply(1.0 / steps);
-
-        new BukkitRunnable() {
-            int currentStep = 0;
-
-            @Override
-            public void run() {
-                if (currentStep >= steps) {
-                    cancel();
-                    return;
-                }
-
-                center.add(stepOffset);
-                placeBlocks();
-
-                for (Player player : Bukkit.getOnlinePlayers()) {
-                    if (isPlayerOnShip(player)) {
-                        Location current = player.getLocation();
-                        Location newLoc = current.clone().add(stepOffset); // плавный шаг
-
-                        // Важно: сохраняем yaw/pitch
-                        newLoc.setYaw(current.getYaw());
-                        newLoc.setPitch(current.getPitch());
-
-                        player.teleport(newLoc);
-                    }
-                }
-
-                updateDisplay();
-                currentStep++;
-            }
-        }.runTaskTimer(getPlugin(), 0L, 1L); // 1 тик = 0.05 сек
-    }
-
-    public void rotateSmoothly(float totalAngle, int steps) {
-        float angleStep = totalAngle / steps;
-
-        new BukkitRunnable() {
-            int currentStep = 0;
-
-            @Override
-            public void run() {
-                if (currentStep >= steps) {
-                    cancel();
-                    return;
-                }
-
-                double radians = Math.toRadians(angleStep);
-
-                // Поворот корабля
-                yaw += angleStep;
-                placeBlocks();
-
-                updateDisplay();
-
-                // Поворот всех игроков вокруг center
-                for (Player player : Bukkit.getOnlinePlayers()) {
-                    if (!isPlayerOnShip(player)) continue;
-
-                    Location loc = player.getLocation();
-
-                    double dx = loc.getX() - center.getX();
-                    double dz = loc.getZ() - center.getZ();
-
-                    double rotatedX = dx * Math.cos(radians) + dz * Math.sin(radians);
-                    double rotatedZ = -dx * Math.sin(radians) + dz * Math.cos(radians);
-
-                    Location newLoc = new Location(
-                            loc.getWorld(),
-                            center.getX() + rotatedX,
-                            loc.getY(),
-                            center.getZ() + rotatedZ,
-                            loc.getYaw() - angleStep,
-                            loc.getPitch()
-                    );
-
-                    player.teleport(newLoc);
-                }
-
-                currentStep++;
-            }
-        }.runTaskTimer(getPlugin(), 0L, 1L);
-    }
 
 
     /* ---------- ОТОБРАЖЕНИЕ ХИТБОКСОВ ---------- */
@@ -393,6 +376,74 @@ public class Ship {
     }
 
 
+    /* ---------- УТИЛИТЫ ---------- */
+
+    private void syncPassengers(Location oldCenter, float oldYaw, Location newCenter, float newYaw) {
+        // Если вызывается НЕ каждый тик — поменяй на своё значение.
+        int ticksBetweenSync = 1; // сколько тиков прошло между old и new состояниями
+        double scale = 1.0D / ticksBetweenSync; // скорость = смещение / тики
+
+        // Перенос центра
+        double dX = newCenter.getX() - oldCenter.getX();
+        double dY = newCenter.getY() - oldCenter.getY();
+        double dZ = newCenter.getZ() - oldCenter.getZ();
+
+        // Нормализуем разницу поворота ([-180;180]) чтобы не крутило на полный круг
+        float dYaw = wrapYawDiff(newYaw - oldYaw);
+        double rad = Math.toRadians(dYaw);
+        double sin = Math.sin(rad);
+        double cos = Math.cos(rad);
+
+        for (Player player : Bukkit.getOnlinePlayers()) {
+            if (!isPlayerOnShip(player)) continue;
+
+            Location loc = player.getLocation();
+            double relX = loc.getX() - oldCenter.getX();
+            double relZ = loc.getZ() - oldCenter.getZ();
+
+            // Повернутая относительная позиция
+            double rotX =  relX * cos + relZ * sin;
+            double rotZ = -relX * sin + relZ * cos;
+
+            // Разница между "как должно быть после шага" и текущим rel-положением
+            double dRelX = rotX - relX;
+            double dRelZ = rotZ - relZ;
+
+            // Итоговое смещение игрока за интервал
+            double moveX = dX + dRelX;
+            double moveY = dY;       // вращаем только по Yaw, поэтому только сдвиг по Y
+            double moveZ = dZ + dRelZ;
+
+            // Скорость (вектора в Minecraft — блоков/тик примерно)
+            Vector vel = new Vector(moveX * scale, moveY * scale, moveZ * scale);
+
+            // Мягкое ограничение, чтобы не вызывало античит / резких рывков (подбери под себя)
+            double max = 3.0; // блоков/тик
+            if (vel.lengthSquared() > max * max) {
+                vel.normalize().multiply(max);
+            }
+
+            player.setVelocity(vel);
+
+            // Обновление ориентации игрока опционально:
+            // Velocity НЕ повернёт игрока. Если нужно повернуть камеру, используй teleport с флагами,
+            // или Paper's player.setRotation(...), или packet.
+            // player.teleport(new Location(loc.getWorld(), loc.getX(), loc.getY(), loc.getZ(), loc.getYaw() + dYaw, loc.getPitch()));
+        }
+    }
+
+    /**
+     * Приводит разницу углов к диапазону [-180; 180], чтобы не получить резкий скачок >180°.
+     */
+    private float wrapYawDiff(float diff) {
+        diff = diff % 360f;
+        if (diff > 180f) diff -= 360f;
+        if (diff < -180f) diff += 360f;
+        return diff;
+    }
+
+
+
     public boolean isPlayerOnShip(Player player) {
         Location loc = player.getLocation();
         double dx = loc.getX() - center.getX();
@@ -404,8 +455,8 @@ public class Ship {
         double localZ = -dx * Math.sin(radians) + dz * Math.cos(radians);
 
         return Math.abs(localX) <= width / 2.0 &&
-            Math.abs(localZ) <= length / 2.0 &&
-            dy >= 0 && dy <= height;
+                Math.abs(localZ) <= length / 2.0 &&
+                dy >= 0 && dy <= height;
     }
 
 }
